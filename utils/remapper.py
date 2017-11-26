@@ -1,5 +1,6 @@
 import csv
 import json
+import uuid
 
 '''Loads the CSV data - Creates a Dictionary Map'''
 def parse_csv(file_path):
@@ -20,6 +21,7 @@ def parse_csv(file_path):
 
                 section_block = dict()
                 section_block['section'] = section
+                section_block['id'] = str(uuid.uuid4())
                 section_block['elements'] = []
 
             element = row[1]
@@ -31,6 +33,7 @@ def parse_csv(file_path):
                 element_options = row[3]
 
             element_block = dict()
+            element_block['id'] = str(uuid.uuid4())
             element_block['param'] = element
             element_block['data-type'] = element_type
             element_block['default-values'] = element_options
