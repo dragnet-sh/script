@@ -10,7 +10,7 @@ def parse_csv(file_path):
 
     try:
         reader = csv.reader(fh)
-        for row in reader:
+        for index, row in enumerate(reader):
             if not row[1]:
                 continue
 
@@ -22,6 +22,7 @@ def parse_csv(file_path):
                 section_block = dict()
                 section_block['section'] = section
                 section_block['id'] = str(uuid.uuid4())
+                section_block['index'] = index
                 section_block['elements'] = []
 
             element = row[1]
@@ -35,7 +36,8 @@ def parse_csv(file_path):
             element_block = dict()
             element_block['id'] = str(uuid.uuid4())
             element_block['param'] = element
-            element_block['data-type'] = element_type
+            element_block['index'] = index
+            element_block['data-type'] = str.lower(element_type)
             element_block['default-values'] = element_options
             element_block['validation'] = element_validation
 
