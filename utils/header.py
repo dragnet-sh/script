@@ -1,13 +1,15 @@
 import xlrd
 import re
-import pandas as pd
+import csv
 
 from os import listdir
 from os.path import isfile, join
 
 data_path = '../../data/PlugLoad-Equipment/'
 data_files = [files for files in listdir(data_path) if isfile(join(data_path, files))]
-# data_files = ['combination_ovens_retrofits.xlsx']
+output_file = './header_output.csv'
+output_lines = []
+
 re_header_identifier = re.compile('company', re.IGNORECASE)
 header_start_column = 1
 
@@ -26,11 +28,19 @@ for data_file in data_files:
     for i in range(0, total_rows):
         if re.search(re_header_identifier, sheet.cell(i, header_start_column).value):
             header_row = i
+            break
 
     '''List out Header Elements'''
     hdr_row_1 = sheet.row(header_row - 1)
     hdr_row_2 = sheet.row(header_row)
 
-    print [label.value for label in hdr_row_2]
+    hdr_lines = [data_file]
+    hdr_lines.extend([lines.value.encode('utf-8').replace('\n', ' ') for lines in hdr_row_2])
+    output_lines.append(hdr_lines)
 
-    # break
+
+'''Write the Header Output to a File'''
+with open(output_file, 'w') as file_obj:
+    writer = csv.writer(file_obj, delimiter=',', quoting=csv.QUOTE_MINIMAL)
+    for line in output_lines:
+        writer.writerow(line)
