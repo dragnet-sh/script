@@ -1,18 +1,12 @@
 import os
 
-instance = 'PROD'
+instance = 'LOCAL'
 
 if instance == 'LOCAL':
 
     os.environ["PARSE_API_ROOT"] = "http://localhost:1337/parse"
     APPLICATION_ID = 'NLI214vDqkoFTJSTtIE2xLqMme6Evd0kA1BbJ20S'
     MASTER_KEY = 'lgEhciURXhAjzITTgLUlXAEdiMJyIF4ZBXdwfpUr'
-
-elif instance == 'PROD':
-
-    os.environ["PARSE_API_ROOT"] = 'http://ec2-18-220-200-115.us-east-2.compute.amazonaws.com:80/parse'
-    APPLICATION_ID = '47f916f7005d19ddd78a6be6b4bdba3ca49615a0'
-    MASTER_KEY = '275302fd8b2b56dca85f127a6123f281b670c787'
 
 from parse_rest.connection import register
 from parse_rest.datatypes import Object
