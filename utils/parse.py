@@ -3,7 +3,6 @@ import os
 instance = 'LOCAL'
 
 if instance == 'LOCAL':
-
     os.environ["PARSE_API_ROOT"] = "http://localhost:1337/parse"
     APPLICATION_ID = 'NLI214vDqkoFTJSTtIE2xLqMme6Evd0kA1BbJ20S'
     MASTER_KEY = 'lgEhciURXhAjzITTgLUlXAEdiMJyIF4ZBXdwfpUr'
@@ -14,8 +13,10 @@ from parse_rest.connection import ParseBatcher
 
 register(APPLICATION_ID, '', master_key=MASTER_KEY)
 
+
 class PlugLoad(Object):
-   pass
+    pass
+
 
 ## 1. Read the CSV file
 ## 2. Save the Header to a list
@@ -25,77 +26,131 @@ class PlugLoad(Object):
 
 import xlrd
 import re
-import hashlib
+
+import mysql.connector as mysql
+from mysql.connector import Error
+cnx = mysql.connect(user='root', password='password', host='127.0.0.1', database='gemini')
 
 from os import listdir
 from os.path import isfile, join
 
 data_path = '../../data/PlugLoad-Equipment/'
-data_files = [files for files in listdir(data_path) if isfile(join(data_path, files))]
-# data_files = ['combination_ovens_retrofits.xlsx']
-
-'''Note: Removing this item as it does not comply with Company - Model Index'''
-try:
-    data_files.remove('televisions_retrofit_2017.xlsx')
-except:
-    pass
 
 op_hdr_lines = []
 hdr_hash_map = dict()
+hdr_metadata = list()
 
 re_hdr_identifier = re.compile('company', re.IGNORECASE)
 hdr_column_index = 1
 tbl_column_index = 1
 
-'''Loop through each of the PlugLoad Equipment Files'''
-for data_file in data_files:
-    print data_file
-    file_path = join(data_path, data_file)
-    xlsx = xlrd.open_workbook(file_path, encoding_override='cp1252')
 
-    sheet = xlsx.sheet_by_index(0)
-    total_rows = sheet.nrows
-    total_columns = sheet.ncols
+def main():
+    data_files = list_file_path()
 
-    hdr_row_index = None
+    '''Loop through each of the PlugLoad Equipment Files'''
+    for data_file in data_files:
+        # print data_file
+        file_path = join(data_path, data_file)
 
-    '''Identify the Header Start Row Index'''
-    for i in range(0, total_rows):
-        if re.search(re_hdr_identifier, sheet.cell(i, hdr_column_index).value):
-            hdr_row_index = i
-            break
+        try:
+            xlsx = xlrd.open_workbook(file_path, encoding_override='cp1252')
+        except Exception, err:
+            print('Exception in file {}'.format(data_file))
+            print(err)
 
-    '''Sanitize the Header Row - Create the Hash Map for each of the Header Items'''
-    hdr_row = sheet.row(hdr_row_index)
-    hdr_row_sanitized = [lines.value.encode('utf-8').replace('\n', ' ') for lines in hdr_row]
-    hdr_hash_map.update({data_file: [hashlib.sha1(lines).hexdigest()[:10] for lines in hdr_row_sanitized]})
+        data_file = data_file.replace('.xlsx', '').lower().replace('-', '_')
+        sheet = xlsx.sheet_by_index(0)
+        total_rows = sheet.nrows
 
-    '''Create the Data Row'''
+        hdr_row_index = None
 
-    pl_data_collection = []
-    for i in range(hdr_row_index + 1, total_rows):
-        data_row = (sheet.row_values(i, start_colx=tbl_column_index, end_colx=len(hdr_row_sanitized)))
+        '''Identify the Header Start Row Index'''
+        for i in range(0, total_rows):
+            if re.search(re_hdr_identifier, sheet.cell(i, hdr_column_index).value):
+                hdr_row_index = i
+                break
 
-        ## 1. Initializing the Plugload Object
-        pl_data = dict()
-        plugload = PlugLoad(
-            type=data_file.replace('.xlsx', ''),
-            company=str(data_row[0]),
-            model=str(data_row[1])
-        )
-        plugload.data = dict()
+        '''Sanitize the Header Row - Create the Hash Map for each of the Header Items'''
+        hdr_row = sheet.row(hdr_row_index)
+        hdr_row.pop(0)  # This is because the first column is empty ****
+        hdr_row_sanitized = [sanitize(item) for item in hdr_row]
+        hdr_hash_map.update({data_file: [item for item in hdr_row_sanitized]})
 
-        ## 2. Packing up the Plugload Object with Data
-        for i, data in enumerate(data_row):
-            field_id = hdr_hash_map.get(data_file)[i]
-            plugload.data.update({
-                field_id: data
-            })
+        '''SQL DROP | CREATE TABLE - STATEMENT'''
+        sql_create = "DROP TABLE IF EXISTS `{}`; CREATE TABLE {} ({} VARCHAR(255));".format(data_file, data_file, ' VARCHAR(255), '.join(hdr_row_sanitized))
+        print sql_create
 
-        ## 3. Aggregating the Data to do a Batch Save
-        pl_data_collection.append(plugload)
+        for statement in sql_create.split(";"):
+            try:
+                cursor = cnx.cursor()
+                cursor.execute(statement)
+            except Error as e:
+                print e
+            finally:
+                cnx.close
 
-    ## 4. Batch Upload - Parse Server
-    batcher = ParseBatcher()
-    batcher.batch_save(pl_data_collection)
+        '''Create the Data Row'''
+        pl_data_collection = []
+        for i in range(hdr_row_index + 1, total_rows):
+            data_row = sheet.row_values(i, start_colx=tbl_column_index, end_colx=len(hdr_row_sanitized) + 1)
 
+            ## ***** SQL INSERT STATEMENT ***** ##
+            sql_data_row = [str(item) for item in data_row]
+            sql_insert = "INSERT INTO {} ({}) VALUES (\"{}\")".format(data_file, ','.join(hdr_row_sanitized), '","'.join(sql_data_row))
+            print sql_insert
+
+            try:
+                cursor = cnx.cursor()
+                cursor.execute(sql_insert)
+            except Error as e:
+                print e
+
+            ## ***** PARSE UPLOAD ***** ##
+            ## 1. Initializing the Plugload Object
+            plugload = PlugLoad(
+                type=data_file
+            )
+            plugload.data = dict()
+
+            for index, data in enumerate(data_row):
+                field_id = hdr_hash_map.get(data_file)[index]
+                plugload.data.update({
+                    field_id: data
+                })
+
+            ## 3. Aggregating the Data to do a Batch Save
+            pl_data_collection.append(plugload)
+
+        cnx.commit()
+        cursor.close()
+
+
+        ## 4. Batch Upload - Parse Server
+        ParseBatcher().batch_save(pl_data_collection)
+
+def list_file_path():
+    data_files = [files for files in listdir(data_path) if isfile(join(data_path, files))]
+    # data_files = ['Solid_Door_Freezers_retrofits.xlsx']
+
+    '''Note: Removing this item as it does not comply with Company - Model Index'''
+    try:
+        data_files.remove('televisions_retrofit_2017.xlsx')
+        data_files.remove('.DS_Store')
+    except:
+        print('unable to clean data files')
+        pass
+
+    return data_files
+
+def sanitize(item):
+    tmp = item.value.encode('utf-8')
+    tmp = tmp.replace('\n', ' ').replace('/', ' ').replace('&', 'n').strip()
+    tmp = re.sub('\(.*?\)', '', tmp).strip()
+    tmp = re.sub('\s', '_', re.sub('\s+', ' ', tmp)).strip()
+
+    return tmp.lower()
+
+
+if __name__ == "__main__":
+    main()
