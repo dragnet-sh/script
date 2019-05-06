@@ -1,0 +1,1 @@
+grep "Repeat" -B 2 ./My\ Clippings.txt | sed 's/Repeat.*\|==.*\|--//g' | sed -r '/^\s*$/d'
