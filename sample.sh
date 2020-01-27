@@ -8,3 +8,6 @@ grep "Highlight.*\:\s[a-zA-Z]\+:\?$" ./ETS_Big_Verbal.txt | cut -d ':' -f 2 | aw
 
 # Extracting the task title from doing and creating a new entry
 doing recent 1 | egrep -o ">(.*?)@" | sed -r 's/>\s|\s@//g' | xargs doing now
+
+# Extracting the frist word of each line
+cat VMain__* | awk '{print tolower($1);}' | sort >> archive.txt
